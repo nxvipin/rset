@@ -9,7 +9,10 @@
          unpack/1,
          add/2,
          delete/2,
-         max/1]).
+         max/1,
+         contains/2]).
+
+-export_type([ivv/0]).
 
 -type int_set()         :: list(pos_integer()).
 -type sorted_int_set()  :: int_set(). %% Should be sorted
@@ -65,6 +68,11 @@ max(IVV) ->
     %% [TODO]: This is inefficient. Fix this.
     lists:max(unpack(IVV)).
 
+-spec contains(pos_integer(), ivv()) -> boolean().
+contains(Integer, IVV) ->
+    %% [TODO]: This is inefficient. Fix this.
+    lists:member(Integer, unpack(IVV)).
+
 
 %% -----------------------------------------------------------------------------
 
@@ -79,25 +87,32 @@ ivv_test_() ->
     AddElement = rand:uniform(100),
     DelElement = lists:nth(rand:uniform(length(TestIntSet)), TestIntSet),
 
-    ?debugFmt("TestIntSet: ~p~n", [TestIntSet]),
-    ?debugFmt("AddElement: ~p~n", [AddElement]),
-    ?debugFmt("DelElement: ~p~n", [DelElement]),
+    UnpackT = [?_assertEqual(UNIQSRT(unpack(pack([]))),
+                             UNIQSRT([])),
+               ?_assertEqual(UNIQSRT(unpack(pack([1]))),
+                             UNIQSRT([1])),
+               ?_assertEqual(UNIQSRT(unpack(pack(TestIntSet))),
+                             UNIQSRT(TestIntSet))],
 
-    [?_assertEqual(UNIQSRT(unpack(pack([]))),
-                   UNIQSRT([])),
-     ?_assertEqual(UNIQSRT(unpack(pack([1]))),
-                   UNIQSRT([1])),
-     ?_assertEqual(UNIQSRT(unpack(pack(TestIntSet))),
-                   UNIQSRT(TestIntSet)),
+    PackT = [?_assertEqual(UNIQSRT(pack(unpack([]))),
+                           UNIQSRT([])),
+             ?_assertEqual(UNIQSRT(pack(unpack([{1,1}]))),
+                           UNIQSRT([{1,1}])),
+             ?_assertEqual(UNIQSRT(pack(unpack(pack(TestIntSet)))),
+                           UNIQSRT(pack(TestIntSet)))],
 
-     ?_assertEqual(UNIQSRT(pack(unpack([]))),
-                   UNIQSRT([])),
-     ?_assertEqual(UNIQSRT(pack(unpack([{1,1}]))),
-                   UNIQSRT([{1,1}])),
-     ?_assertEqual(UNIQSRT(pack(unpack(pack(TestIntSet)))),
-                   UNIQSRT(pack(TestIntSet))),
+    AddT = [?_assertEqual(UNIQSRT(unpack(add(AddElement, pack([])))),
+                          UNIQSRT([AddElement | []])),
+            ?_assertEqual(UNIQSRT(unpack(add(AddElement, pack(TestIntSet)))),
+                          UNIQSRT([AddElement | TestIntSet]))],
 
-     ?_assertEqual(UNIQSRT(unpack(add(AddElement, pack(TestIntSet)))),
-                   UNIQSRT([AddElement | TestIntSet])),
-     ?_assertEqual(UNIQSRT(unpack(delete(DelElement, pack(TestIntSet)))),
-                   UNIQSRT(lists:delete(DelElement, TestIntSet)))].
+    DelT = [?_assertEqual(UNIQSRT(unpack(delete(DelElement, pack([DelElement])))),
+                          UNIQSRT(lists:delete(DelElement, [DelElement]))),
+            ?_assertEqual(UNIQSRT(unpack(delete(DelElement, pack(TestIntSet)))),
+                          UNIQSRT(lists:delete(DelElement, TestIntSet)))],
+
+    ContainsT = (fun(Elements, IVV) ->
+                         [?_assert(contains(Val, IVV)) || Val <- Elements]
+                 end)(TestIntSet, pack(TestIntSet)),
+
+    UnpackT ++ PackT ++ AddT ++ DelT ++ ContainsT.
