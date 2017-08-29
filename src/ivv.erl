@@ -76,6 +76,7 @@ contains(Integer, IVV) ->
 
 %% -----------------------------------------------------------------------------
 
+-ifdef(TEST).
 
 ivv_test_() ->
     %% [TODO]: This is a good case for property based testing. Consider that in
@@ -116,3 +117,5 @@ ivv_test_() ->
                  end)(TestIntSet, pack(TestIntSet)),
 
     UnpackT ++ PackT ++ AddT ++ DelT ++ ContainsT.
+
+-endif.
