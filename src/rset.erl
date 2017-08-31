@@ -32,20 +32,22 @@ init(ThisReplica, AllReplicas) ->
 
 add({add_downstream, {_MsgVal, MsgTimestamp, MsgSourceReplica}=Element},
     #rset{elements=Elements,
-          ivvmap=IVVMap}=Rset) ->
+          ivvmap=IVVMap}=Rset0) ->
     %% Downstream operation of Add. We have not see this element before so we
     %% add it and update our element list and ivv of the source replica.
     #{MsgSourceReplica := MsgSourceReplicaIVV0}=IVVMap,
-    case not ivv:contains(MsgTimestamp, MsgSourceReplicaIVV0) of
-         true ->
-            #{MsgSourceReplica := MsgSourceReplicaIVV0}=IVVMap,
-            MsgSourceReplicaIVV = ivv:add(MsgTimestamp, MsgSourceReplicaIVV0),
-            Rset#rset{
-              elements = [Element | Elements],
-              ivvmap = IVVMap#{MsgSourceReplica := MsgSourceReplicaIVV}};
-        false ->
-            Rset
-    end;
+    Rset = case not ivv:contains(MsgTimestamp, MsgSourceReplicaIVV0) of
+               true ->
+                   #{MsgSourceReplica := MsgSourceReplicaIVV0}=IVVMap,
+                   MsgSourceReplicaIVV = ivv:add(MsgTimestamp,
+                                                 MsgSourceReplicaIVV0),
+                   Rset0#rset{
+                     elements = [Element | Elements],
+                     ivvmap = IVVMap#{MsgSourceReplica := MsgSourceReplicaIVV}};
+               false ->
+                   Rset0
+           end,
+    {Element, Rset};
 
 add(Val, #rset{this=SourceReplica, timestamp=Timestamp}=Rset) ->
     %% A value was added at this replica. We create an element() from this value
