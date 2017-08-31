@@ -11,24 +11,35 @@
 -record(rset, {elements     :: elements(),
                timestamp    :: timestamp(),
                ivvmap       :: ivvmap(),
-               this         :: replica()}).
+               repinfo      :: {this_replica(),
+                                other_replicas(),
+                                all_replicas()}}).
 
--type update()      :: any().
--type timestamp()   :: non_neg_integer().
--type replica()     :: any().
--type ivvmap()      :: #{replica() := ivv:ivv()}.
--type element()     :: #element{}.
--type elements()    :: list(element()).
+-type update()         :: any().
+-type timestamp()      :: non_neg_integer().
+
+-type replica()        :: any().
+-type this_replica()   :: replica().       %% Current replica
+-type other_replicas() :: list(replica()). %% All replicas except `this` replica
+-type all_replicas()   :: list(replica()). %% All participating replicas
+
+-type ivvmap()         :: #{replica() := ivv:ivv()}.
+-type element()        :: #element{}.
+-type elements()       :: list(element()).
 
 
 %% -----------------------------------------------------------------------------
 
 
 init(ThisReplica, AllReplicas) ->
+    OtherReplicas = lists:delete(ThisReplica, AllReplicas),
+    init(ThisReplica, OtherReplicas, AllReplicas).
+
+init(ThisReplica, OtherReplicas, AllReplicas) ->
     #rset{elements=[],
           timestamp=0,
           ivvmap=maps:from_list([{Rep, []} || Rep <- AllReplicas]),
-          this=ThisReplica}.
+          repinfo={ThisReplica, OtherReplicas, AllReplicas}}.
 
 add({add_downstream, {_MsgVal, MsgTimestamp, MsgSourceReplica}=Element},
     #rset{elements=Elements,
@@ -49,7 +60,7 @@ add({add_downstream, {_MsgVal, MsgTimestamp, MsgSourceReplica}=Element},
            end,
     {Element, Rset};
 
-add(Val, #rset{this=SourceReplica, timestamp=Timestamp}=Rset) ->
+add(Val, #rset{repinfo={SourceReplica, _, _}, timestamp=Timestamp}=Rset) ->
     %% A value was added at this replica. We create an element() from this value
     %% and propagate it downstream.
     Element = {Val, Timestamp, SourceReplica},
