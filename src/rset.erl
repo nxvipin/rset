@@ -44,7 +44,7 @@ add(Val, #rset{repinfo={SourceReplica, _, _}, timestamp=Timestamp}=Rset) ->
     %% and propagate it downstream.
     Element = {Val, Timestamp, SourceReplica},
 
-    %% Downstream operation at this replica, which is the source replica.
+    %% Downstream operation at this replica, which is the source replica. The
+    %% downstream operation is propagated to other replicas by the the `replica`
+    %% server using the return value of this function.
     add(Element, Rset#rset{timestamp=Timestamp+1}).
-    %% [TODO]: Send downstream add operation to all replicas other than the
-    %% source replica ideally handled by a messaging middleware.
