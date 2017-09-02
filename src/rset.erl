@@ -21,9 +21,8 @@ init(ThisReplica, OtherReplicas, AllReplicas) ->
           ivvmap=maps:from_list([{Rep, []} || Rep <- AllReplicas]),
           repinfo={ThisReplica, OtherReplicas, AllReplicas}}.
 
-add({add_downstream, {_MsgVal, MsgTimestamp, MsgSourceReplica}=Element},
-    #rset{elements=Elements,
-          ivvmap=IVVMap}=Rset0) ->
+add({_MsgVal, MsgTimestamp, MsgSourceReplica}=Element,
+    #rset{elements=Elements, ivvmap=IVVMap}=Rset0) ->
     %% Downstream operation of Add. We have not see this element before so we
     %% add it and update our element list and ivv of the source replica.
     #{MsgSourceReplica := MsgSourceReplicaIVV0}=IVVMap,
@@ -46,6 +45,6 @@ add(Val, #rset{repinfo={SourceReplica, _, _}, timestamp=Timestamp}=Rset) ->
     Element = {Val, Timestamp, SourceReplica},
 
     %% Downstream operation at this replica, which is the source replica.
-    add({add_downstream, Element}, Rset#rset{timestamp=Timestamp+1}).
+    add(Element, Rset#rset{timestamp=Timestamp+1}).
     %% [TODO]: Send downstream add operation to all replicas other than the
     %% source replica ideally handled by a messaging middleware.
