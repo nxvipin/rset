@@ -10,7 +10,8 @@
          add/2,
          delete/2,
          max/1,
-         contains/2]).
+         contains/2,
+         union/2]).
 
 -export_type([ivv/0]).
 
@@ -79,6 +80,10 @@ contains(Integer, IVV) ->
     %% [TODO]: This is inefficient. Fix this.
     lists:member(Integer, unpack(IVV)).
 
+-spec union(ivv(), ivv()) -> ivv().
+union(IVV1, IVV2) ->
+    pack(sets:to_list(sets:from_list(unpack(IVV1) ++ unpack(IVV2)))).
+
 
 %% -----------------------------------------------------------------------------
 
@@ -91,6 +96,8 @@ ivv_test_() ->
 
     TestIntSet = UNIQSRT([rand:uniform(50)
                           || _ <- lists:seq(1, rand:uniform(50))]),
+    TestIntSet2 = UNIQSRT([rand:uniform(50)
+                           || _ <- lists:seq(1, rand:uniform(50))]),
     AddElement1 = rand:uniform(100),
     AddElement2 = rand:uniform(100),
     DelElement = lists:nth(rand:uniform(length(TestIntSet)), TestIntSet),
@@ -129,6 +136,19 @@ ivv_test_() ->
                          [?_assert(contains(Val, IVV)) || Val <- Elements]
                  end)(TestIntSet, pack(TestIntSet)),
 
-    UnpackT ++ PackT ++ AddT ++ AddMultipleT ++ DelT ++ ContainsT.
+    UnionT =
+        [?_assertEqual(UNIQSRT(union([], [])),
+                       UNIQSRT([])),
+         ?_assertEqual(UNIQSRT(pack(unpack(union(pack(TestIntSet),
+                                                 pack(TestIntSet2))))),
+                       UNIQSRT(union(pack(TestIntSet), pack(TestIntSet2))))],
+
+    UnionContainsT = (fun(Elements, IVV) ->
+                              [?_assert(contains(Val, IVV)) || Val <- Elements]
+                      end)(TestIntSet ++ TestIntSet2,
+                           union(pack(TestIntSet), pack(TestIntSet2))),
+
+    UnpackT ++ PackT ++ AddT ++ AddMultipleT ++ DelT ++ ContainsT ++ UnionT
+        ++ UnionContainsT.
 
 -endif.
