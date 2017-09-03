@@ -15,7 +15,6 @@
 -export_type([ivv/0]).
 
 -type int_set()         :: list(pos_integer()).
--type sorted_int_set()  :: int_set(). %% Should be sorted
 -type interval()        :: {nil, nil}
                          | {pos_integer(), nil}
                          | {pos_integer(), pos_integer()}.
@@ -25,9 +24,9 @@
 %% -----------------------------------------------------------------------------
 
 
--spec pack(sorted_int_set()) -> ivv().
+-spec pack(int_set()) -> ivv().
 pack(Input) ->
-    pack(Input, {nil, nil}, []).
+    pack(lists:sort(Input), {nil, nil}, []).
 
 pack([], _Interval, IVV) ->
     IVV;
@@ -63,12 +62,12 @@ add([Integer|Rest], IVV) ->
 
 add(Integer, IVV) when is_integer(Integer) ->
     %% [TODO]: This is inefficient. Fix this.
-    pack(lists:sort([Integer | unpack(IVV)])).
+    pack([Integer | unpack(IVV)]).
 
 -spec delete(pos_integer(), ivv()) -> ivv().
 delete(Integer, IVV) ->
     %% [TODO]: This is inefficient. Fix this.
-    pack(lists:sort(lists:delete(Integer, unpack(IVV)))).
+    pack(lists:delete(Integer, unpack(IVV))).
 
 -spec max(ivv()) -> pos_integer().
 max(IVV) ->
