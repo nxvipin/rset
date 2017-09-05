@@ -5,9 +5,12 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2,
+-export([create/1,
          add/2,
          delete/2]).
+
+% Internal API
+-export([start_link/2]).
 
 %% Gen server callbacks
 -export([init/1,
@@ -19,6 +22,9 @@
 
 
 %% -----------------------------------------------------------------------------
+
+create(AllReplicas) ->
+    rset_sup:create_replica(AllReplicas).
 
 
 start_link(ThisReplica, AllReplicas) ->
