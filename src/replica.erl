@@ -6,7 +6,8 @@
 
 %% API
 -export([start_link/2,
-         add/2]).
+         add/2,
+         delete/2]).
 
 %% Gen server callbacks
 -export([init/1,
@@ -27,6 +28,9 @@ start_link(ThisReplica, AllReplicas) ->
 add(Replica, Value) ->
     gen_server:call(Replica, {add, Value}).
 
+delete(Replica, Value) ->
+    gen_server:call(Replica, {delete, Value}).
+
 init([ThisReplica, AllReplicas]) ->
     {ok, rset:init(ThisReplica, AllReplicas)}.
 
@@ -39,6 +43,16 @@ handle_call({add, Value}, _From,
     {Element, State} = rset:add(Value, State0),
     [add(Replica, Element) || Replica <- OtherReplicas],
     {reply, {ok, Element}, State};
+
+handle_call({delete, #{}=DelIVVMap}, _From, State0) ->
+    {Element, State} = rset:delete(DelIVVMap, State0),
+    {reply, {ok, Element}, State};
+
+handle_call({delete, Value}, _From,
+            #rset{repinfo = {_, OtherReplicas, _}}=State0) ->
+    {DelIVVMap, State} = rset:delete(Value, State0),
+    [delete(Replica, DelIVVMap) || Replica <- OtherReplicas],
+    {reply, {ok, DelIVVMap}, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
