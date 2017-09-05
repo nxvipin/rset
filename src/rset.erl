@@ -6,7 +6,8 @@
 %% Public API
 -export([init/2,
          add/2,
-         delete/2]).
+         delete/2,
+         elements/1]).
 
 
 %% -----------------------------------------------------------------------------
@@ -69,6 +70,9 @@ delete(Value, #rset{elements=Elements}=Rset) ->
                                        Val == Value
                                end, Elements),
     delete(add_ivvmap(DelElements, IVVMap), Rset).
+
+elements(#rset{elements=Elements}) ->
+    [Val || {Val, _, _} <- Elements].
 
 
 %% -----------------------------------------------------------------------------

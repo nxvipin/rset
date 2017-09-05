@@ -37,6 +37,9 @@ add(Replica, Value) ->
 delete(Replica, Value) ->
     gen_server:call(Replica, {delete, Value}).
 
+elements(Replica) ->
+    gen_server:call(Replica, elements).
+
 init([ThisReplica, AllReplicas]) ->
     {ok, rset:init(ThisReplica, AllReplicas)}.
 
@@ -59,6 +62,10 @@ handle_call({delete, Value}, _From,
     {DelIVVMap, State} = rset:delete(Value, State0),
     [delete(Replica, DelIVVMap) || Replica <- OtherReplicas],
     {reply, {ok, DelIVVMap}, State};
+
+handle_call(elements, _From, State) ->
+    Elements = rset:elements(State),
+    {reply, {ok, Elements}, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
