@@ -1,7 +1,3 @@
--record(element, {update    :: update(),
-                  timestamp :: timestamp(),
-                  replica   :: replica()}).
-
 -record(rset, {elements     :: elements(),
                timestamp    :: timestamp(),
                ivvmap       :: ivvmap(),
@@ -18,5 +14,5 @@
 -type all_replicas()   :: list(replica()). %% All participating replicas
 
 -type ivvmap()         :: #{replica() := ivv:ivv()}.
--type element()        :: #element{}.
+-type element()        :: {update(), timestamp(), replica()}.
 -type elements()       :: list(element()).
