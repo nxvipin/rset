@@ -5,7 +5,7 @@
                                 other_replicas(),
                                 all_replicas()}}).
 
--type update()         :: any().
+-type value()          :: any().
 -type timestamp()      :: non_neg_integer().
 
 -type replica()        :: any().
@@ -14,5 +14,5 @@
 -type all_replicas()   :: list(replica()). %% All participating replicas
 
 -type ivvmap()         :: #{replica() := ivv:ivv()}.
--type element()        :: {update(), timestamp(), replica()}.
+-type element()        :: {value(), timestamp(), replica()}.
 -type elements()       :: list(element()).
