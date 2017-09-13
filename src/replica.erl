@@ -7,7 +7,8 @@
 %% API
 -export([create/1,
          add/2,
-         delete/2]).
+         delete/2,
+         elements/1]).
 
 % Internal API
 -export([start_link/2]).
