@@ -24,18 +24,14 @@ init(ThisReplica, OtherReplicas, AllReplicas) ->
           repinfo={ThisReplica, OtherReplicas, AllReplicas}}.
 
 add({_MsgVal, MsgTimestamp, MsgSourceReplica}=Element,
-    #rset{elements=Elements, ivvmap=IVVMap}=Rset0) ->
+    #rset{elements=Elements, ivvmap=IVVMap0}=Rset0) ->
     %% Downstream operation of Add. We have not see this element before so we
     %% add it and update our element list and ivv of the source replica.
-    #{MsgSourceReplica := MsgSourceReplicaIVV0}=IVVMap,
-    Rset = case not ivv:contains(MsgTimestamp, MsgSourceReplicaIVV0) of
+    Rset = case not ivvmap_contains({MsgTimestamp, MsgSourceReplica}, IVVMap0) of
                true ->
-                   #{MsgSourceReplica := MsgSourceReplicaIVV0}=IVVMap,
-                   MsgSourceReplicaIVV = ivv:add(MsgTimestamp,
-                                                 MsgSourceReplicaIVV0),
-                   Rset0#rset{
-                     elements = [Element | Elements],
-                     ivvmap = IVVMap#{MsgSourceReplica := MsgSourceReplicaIVV}};
+                   IVVMap = add_ivvmap({MsgTimestamp, MsgSourceReplica}, IVVMap0),
+                   Rset0#rset{elements = [Element | Elements],
+                              ivvmap = IVVMap};
                false ->
                    Rset0
            end,
@@ -98,3 +94,7 @@ union_ivvmap(IVVMap1, IVVMap2) ->
                      IVV2 = maps:get(K, IVVMap2),
                      ivv:union(IVV1, IVV2)
              end, IVVMap1).
+
+ivvmap_contains({Timestamp, Replica}, IVVMap) ->
+    #{Replica := ReplicaIVV}=IVVMap,
+    ivv:contains(Timestamp, ReplicaIVV).
