@@ -4,8 +4,20 @@ Replicated Sets
 Optimized ORSET without ordering constraints
 
 
+### Running the tests
+
 ```
-$ rebar3 shell
+$ vagrant up
+$ vagrant ssh
+$ cd /rset/ && rebar3 eunit
+```
+
+
+### Interactive Session
+
+(In the vagrant machine)
+```
+$ rebar3 shell --config app.config --apps rset
 ===> Verifying dependencies...
 ===> Compiling rset
 Erlang/OTP 20 [erts-9.0] [source] [64-bit] [smp:8:8] [ds:8:8:10] [async-threads:0] [kernel-poll:false]
@@ -42,3 +54,5 @@ ok
 12> replica:elements(c).
 {ok,[z,x]}
 ```
+---
+[![Build Status](https://travis-ci.org/swvist/rset.svg?branch=master)](https://travis-ci.org/swvist/rset)
