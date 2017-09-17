@@ -42,10 +42,10 @@ add(Replica, {_,_,_}=Element) ->
 add(Replica, Value) ->
     gen_server:call(Replica, {add, Value}).
 
-delete(Replica, {ThisReplica, #{}=DelIVVMap}) ->
+delete(Replica, {#{}=_, _,_}=DelElement) ->
     %% Downstream operations are async. This is called by the source replica to
     %% propagate downstream delete operation.
-    gen_server:cast(Replica, {delete_downstream, ThisReplica, DelIVVMap});
+    gen_server:cast(Replica, {delete_downstream, DelElement});
 
 delete(Replica, Value) ->
     gen_server:call(Replica, {delete, Value}).
@@ -53,15 +53,15 @@ delete(Replica, Value) ->
 elements(Replica) ->
     gen_server:call(Replica, elements).
 
-ack(SourceReplica, DownstreamReplica, {_,_,_}=Element) ->
+add_ack(SourceReplica, DownstreamReplica, {_,_,_}=Element) ->
     %% Ack a downstream add message received by the
     gen_server:cast(SourceReplica, {ack_add_downstream, SourceReplica,
-                                    DownstreamReplica, Element});
+                                    DownstreamReplica, Element}).
 
-ack(SourceReplica, DownstreamReplica, #{}=DelIVVMap) ->
+del_ack(SourceReplica, DownstreamReplica, {#{}=_,_,_}=DelElement) ->
     %% Ack a downstream delete message received by the
-    gen_server:cast(SourceReplica, {ack_add_downstream, SourceReplica,
-                                    DownstreamReplica, DelIVVMap}).
+    gen_server:cast(SourceReplica, {ack_delete_downstream, SourceReplica,
+                                    DownstreamReplica, DelElement}).
 
 init([ThisReplica, AllReplicas]) ->
     {ok, rset:init(ThisReplica, AllReplicas)}.
@@ -78,11 +78,11 @@ handle_call({add, Value}, From,
 
 handle_call({delete, Value}, From,
             #rset{repinfo = {ThisReplica, OtherReplicas, _}}=State0) ->
-    {DelIVVMap, State} = rset:delete(Value, State0),
+    {DelElement, State} = rset:delete(Value, State0),
     lager:debug("Delete operation received from Client: ~p ThisReplica: ~p "
-                "DelIVVMap:~p", [From, ThisReplica, DelIVVMap]),
-    [delete(Replica, {ThisReplica, DelIVVMap}) || Replica <- OtherReplicas],
-    {reply, {ok, DelIVVMap}, State};
+                "DelIVVMap:~p", [From, ThisReplica, DelElement]),
+    [delete(Replica, DelElement) || Replica <- OtherReplicas],
+    {reply, {ok, DelElement}, State};
 
 handle_call(elements, _From, State) ->
     Elements = rset:elements(State),
@@ -92,13 +92,13 @@ handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
-handle_cast({add_downstream, {Value, Timestamp, SourceReplica}=Element},
+handle_cast({add_downstream, {_Value, _Timestamp, SourceReplica}=Element},
             #rset{repinfo={ThisReplica, _, _}}=State0) ->
     lager:debug("Add downstream operation received from SourceReplica: ~p "
-                "ThisReplica: ~p Value: ~p Timestamp: ~p",
-                [SourceReplica, ThisReplica, Value, Timestamp]),
+                "ThisReplica: ~p Element: ~p",
+                [SourceReplica, ThisReplica, Element]),
     {Element, State} = rset:add(Element, State0),
-    ack(SourceReplica, ThisReplica, Element),
+    add_ack(SourceReplica, ThisReplica, Element),
     {noreply, State};
 
 handle_cast({ack_add_downstream, ThisReplica, DownstreamReplica, Element},
@@ -108,13 +108,13 @@ handle_cast({ack_add_downstream, ThisReplica, DownstreamReplica, Element},
                 [ThisReplica, DownstreamReplica, Element]),
     {noreply, State};
 
-handle_cast({delete_downstream, SourceReplica, #{}=DelIVVMap},
+handle_cast({delete_downstream, {#{}=_DelIVVMap, _Timestamp, SourceReplica}=DelElement},
             #rset{repinfo={ThisReplica, _, _}}=State0) ->
     lager:debug("Delete downstream operation received from SourceReplica: ~p "
-                "ThisReplica: ~p DelIVVMap: ~p",
-                [SourceReplica, ThisReplica, DelIVVMap]),
-    {DelIVVMap, State} = rset:delete(DelIVVMap, State0),
-    ack(SourceReplica, ThisReplica, DelIVVMap),
+                "ThisReplica: ~p DelElement: ~p",
+                [SourceReplica, ThisReplica, DelElement]),
+    {DelElement, State} = rset:delete(DelElement, State0),
+    del_ack(SourceReplica, ThisReplica, DelElement),
     {noreply, State};
 
 handle_cast({ack_delete_downstream, ThisReplica, DownstreamReplica, DelIVVMap},
