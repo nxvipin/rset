@@ -11,7 +11,8 @@
          delete/2,
          max/1,
          contains/2,
-         union/2]).
+         union/2,
+         diff/2]).
 
 -export_type([ivv/0]).
 
@@ -84,6 +85,10 @@ contains(Integer, IVV) ->
 union(IVV1, IVV2) ->
     pack(sets:to_list(sets:from_list(unpack(IVV1) ++ unpack(IVV2)))).
 
+-spec diff(ivv(), ivv()) -> list(pos_integer()).
+diff(IVV1, IVV2) ->
+    lists:subtract(unpack(IVV1), unpack(IVV2)).
+
 
 %% -----------------------------------------------------------------------------
 
@@ -148,7 +153,11 @@ ivv_test_() ->
                       end)(TestIntSet ++ TestIntSet2,
                            union(pack(TestIntSet), pack(TestIntSet2))),
 
+    DiffT = [?_assertEqual(diff([], []), []),
+             ?_assertEqual(diff(pack(TestIntSet), pack(TestIntSet2)),
+                           lists:subtract(TestIntSet, TestIntSet2))],
+
     UnpackT ++ PackT ++ AddT ++ AddMultipleT ++ DelT ++ ContainsT ++ UnionT
-        ++ UnionContainsT.
+        ++ UnionContainsT ++ DiffT.
 
 -endif.
