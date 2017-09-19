@@ -9,7 +9,6 @@
          delete/2,
          elements/1]).
 
-
 %% -----------------------------------------------------------------------------
 
 
@@ -20,16 +19,16 @@ init(ThisReplica, AllReplicas) ->
 init(ThisReplica, OtherReplicas, AllReplicas) ->
     #rset{elements=[],
           timestamp=0,
-          ivvmap=init_ivvmap(AllReplicas),
+          ivvmap=ivv:minit(AllReplicas),
           repinfo={ThisReplica, OtherReplicas, AllReplicas}}.
 
 add({_MsgVal, MsgTimestamp, MsgSourceReplica}=Element,
     #rset{elements=Elements, ivvmap=IVVMap0}=Rset0) ->
     %% Downstream operation of Add. We have not see this element before so we
     %% add it and update our element list and ivv of the source replica.
-    Rset = case not ivvmap_contains({MsgTimestamp, MsgSourceReplica}, IVVMap0) of
+    Rset = case not ivv:mcontains(MsgTimestamp, MsgSourceReplica, IVVMap0) of
                true ->
-                   IVVMap = add_ivvmap({MsgTimestamp, MsgSourceReplica}, IVVMap0),
+                   IVVMap = ivv:madd(MsgTimestamp, MsgSourceReplica, IVVMap0),
                    Rset0#rset{elements = [Element | Elements],
                               ivvmap = IVVMap};
                false ->
@@ -50,11 +49,11 @@ add(Val, #rset{repinfo={SourceReplica, _, _}, timestamp=Timestamp0}=Rset) ->
 
 delete({#{}=DelIVVMap, DelTimestamp, DelSourceReplica}=DelElement,
        #rset{elements=Elements0, ivvmap=IVVMap0}=Rset0) ->
-    Rset = case not ivvmap_contains({DelTimestamp, DelSourceReplica}, IVVMap0)
+    Rset = case not ivv:mcontains(DelTimestamp, DelSourceReplica, IVVMap0)
            of true ->
                    %% Record that we have seen this delete operation from the
                    %% SourceReplica
-                   IVVMap1 = add_ivvmap({DelTimestamp, DelSourceReplica}, IVVMap0),
+                   IVVMap1 = ivv:madd(DelTimestamp, DelSourceReplica, IVVMap0),
                    %% Remove elements based on DelIVVMap
                    RemovedElements = lists:filter(
                                    fun({_, Timestamp, Replica}) ->
@@ -64,7 +63,7 @@ delete({#{}=DelIVVMap, DelTimestamp, DelSourceReplica}=DelElement,
                                    Elements0),
                    Elements = lists:subtract(Elements0, RemovedElements),
                    %% Record elements that should have been deleted in the IVVMap
-                   IVVMap = union_ivvmap(IVVMap1, DelIVVMap),
+                   IVVMap = ivv:munion(IVVMap1, DelIVVMap),
                    Rset0#rset{elements=Elements, ivvmap=IVVMap};
                false ->
                    Rset0
@@ -72,44 +71,14 @@ delete({#{}=DelIVVMap, DelTimestamp, DelSourceReplica}=DelElement,
     {DelElement, Rset};
 
 delete(Value, #rset{elements=Elements, timestamp=Timestamp0,
-                    repinfo={SourceReplica, _, _}}=Rset) ->
+                    repinfo={SourceReplica, _, AllReplicas}}=Rset) ->
     Timestamp = Timestamp0 + 1,
-    IVVMap = init_ivvmap(Rset),
-    DelElements = lists:filter(fun({Val, _, _}) ->
-                                       Val == Value
-                               end, Elements),
-    DelIVVMap = add_ivvmap(DelElements, IVVMap),
+    IVVMap = ivv:minit(AllReplicas),
+    DelPairs = [{ETimestamp, EReplica}
+                || {EValue, ETimestamp, EReplica} <- Elements, EValue = Value],
+    DelIVVMap = ivv:madd(DelPairs, IVVMap),
     DelElement = {DelIVVMap, Timestamp, SourceReplica},
     delete(DelElement, Rset#rset{timestamp=Timestamp}).
 
 elements(#rset{elements=Elements}) ->
     [Val || {Val, _, _} <- Elements].
-
-
-%% -----------------------------------------------------------------------------
-
-
-init_ivvmap(#rset{repinfo={_,_,AllReplicas}}) ->
-    init_ivvmap(AllReplicas);
-init_ivvmap(AllReplicas) when is_list(AllReplicas) ->
-    maps:from_list([{Rep, []} || Rep <- AllReplicas]).
-
-add_ivvmap([], IVVMap) ->
-    IVVMap;
-add_ivvmap([{Timestamp, Replica} | Rest], IVVMap) ->
-    add_ivvmap(Rest, add_ivvmap({Timestamp, Replica}, IVVMap));
-add_ivvmap([{_Value, Timestamp, Replica} | Rest], IVVMap) ->
-    add_ivvmap(Rest, add_ivvmap({Timestamp, Replica}, IVVMap));
-add_ivvmap({Timestamp, Replica}, IVVMap) ->
-    #{Replica := IVV} = IVVMap,
-    IVVMap#{Replica := ivv:add(Timestamp, IVV)}.
-
-union_ivvmap(IVVMap1, IVVMap2) ->
-    maps:map(fun(K, IVV1) ->
-                     IVV2 = maps:get(K, IVVMap2),
-                     ivv:union(IVV1, IVV2)
-             end, IVVMap1).
-
-ivvmap_contains({Timestamp, Replica}, IVVMap) ->
-    #{Replica := ReplicaIVV}=IVVMap,
-    ivv:contains(Timestamp, ReplicaIVV).

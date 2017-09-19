@@ -1,10 +1,13 @@
 -module(ivv).
 -author("Vipin Nair <swvist@gmail.com>").
 
+-include("rset.hrl").
+
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
 
+%% Operations on IVV
 -export([pack/1,
          unpack/1,
          add/2,
@@ -13,6 +16,13 @@
          contains/2,
          union/2,
          diff/2]).
+
+%% Operations on IVV Map
+-export([minit/1,
+         madd/2,
+         madd/3,
+         munion/2,
+         mcontains/3]).
 
 -export_type([ivv/0]).
 
@@ -88,6 +98,34 @@ union(IVV1, IVV2) ->
 -spec diff(ivv(), ivv()) -> list(pos_integer()).
 diff(IVV1, IVV2) ->
     lists:subtract(unpack(IVV1), unpack(IVV2)).
+
+-spec minit(list(any())) -> ivvmap().
+minit(Keys) when is_list(Keys) ->
+    maps:from_list([{Key, []} || Key <- Keys]).
+
+-spec madd(list({pos_integer(), any()}), ivvmap()) -> ivvmap().
+madd([], IVV) ->
+    IVV;
+madd([{Integer, Key} | Rest], IVV0) ->
+    IVV = madd(Integer, Key, IVV0),
+    madd(Rest, IVV).
+
+-spec madd(pos_integer(), any(), ivvmap()) -> ivvmap().
+madd(Integer, Key, IVVMap) ->
+    #{Key := IVV} = IVVMap,
+    IVVMap#{Key := add(Integer, IVV)}.
+
+-spec munion(ivvmap(), ivvmap()) -> ivvmap().
+munion(IVVMap1, IVVMap2) ->
+    maps:map(fun(K, IVV1) ->
+                     IVV2 = maps:get(K, IVVMap2),
+                     ivv:union(IVV1, IVV2)
+             end, IVVMap1).
+
+-spec mcontains(pos_integer(), any(), ivvmap()) -> boolean().
+mcontains(Integer, Key, IVVMap) ->
+    #{Key := IVV} = IVVMap,
+    contains(Integer, IVV).
 
 
 %% -----------------------------------------------------------------------------
