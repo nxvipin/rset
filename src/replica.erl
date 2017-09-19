@@ -25,6 +25,11 @@
 %% -----------------------------------------------------------------------------
 
 
+-record(state, {rset   :: rset(),
+                dlog   :: map(),
+                ackmap :: ackivvmap()}).
+
+
 create(AllReplicas) ->
     rset_sup:create_replica(AllReplicas).
 
@@ -64,25 +69,49 @@ del_ack(SourceReplica, DownstreamReplica, {#{}=_,_,_}=DelElement) ->
                                     DownstreamReplica, DelElement}).
 
 init([ThisReplica, AllReplicas]) ->
-    {ok, rset:init(ThisReplica, AllReplicas)}.
+    {ok, #state{rset = rset:init(ThisReplica, AllReplicas),
+                dlog = #{},
+                ackmap = ivv:minit(AllReplicas)}}.
 
 handle_call({add, Value}, From,
-            #rset{repinfo = {ThisReplica, OtherReplicas, _}}=State0) ->
-
-    {{Value, Timestamp, ThisReplica}=Element, State} = rset:add(Value, State0),
+            #state{rset=#rset{repinfo={ThisReplica, OtherReplicas, _}}=Rset0,
+                   dlog=Dlog,
+                   ackmap=AckMap}=State) ->
+    %% Insert the value into the set
+    {{Value, Timestamp, ThisReplica}=Element, Rset} = rset:add(Value, Rset0),
     lager:debug("Add operation received from Client: ~p "
                 "ThisReplica: ~p Timestamp: ~p Value:~p",
                 [From, ThisReplica, Timestamp, Value]),
+    %% Send the element to other downstream replicas asynchronously
     [add(Replica, Element) || Replica <- OtherReplicas],
-    {reply, {ok, Element}, State};
+    {reply, {ok, Element}, State#state{
+                             %% Update the set in the state
+                             rset=Rset,
+                             %% Add the downstream entry to the log
+                             dlog=Dlog#{Timestamp => Element},
+                             %% Trivially ack the reciept of the downstream
+                             %% message at ThisReplica
+                             ackmap = ivv:madd(Timestamp, ThisReplica, AckMap)}};
 
 handle_call({delete, Value}, From,
-            #rset{repinfo = {ThisReplica, OtherReplicas, _}}=State0) ->
-    {DelElement, State} = rset:delete(Value, State0),
+            #state{rset=#rset{repinfo={ThisReplica, OtherReplicas, _}}=Rset0,
+                   dlog=Dlog,
+                   ackmap=AckMap}=State) ->
+    %% Delete the element from the set
+    {{_, DelTimestamp, _}=DelElement, Rset} = rset:delete(Value, Rset0),
     lager:debug("Delete operation received from Client: ~p ThisReplica: ~p "
                 "DelIVVMap:~p", [From, ThisReplica, DelElement]),
+    %% Send the delete element to other downstream replicas asychronously
     [delete(Replica, DelElement) || Replica <- OtherReplicas],
-    {reply, {ok, DelElement}, State};
+    {reply, {ok, DelElement},
+     State#state{
+       %% Update the set in the state
+       rset=Rset,
+       %% Add the downstream entry to the log
+       dlog=Dlog#{DelTimestamp => DelElement},
+       %% Trivially ack the reciept of the downstream
+       %% message at ThisReplica
+       ackmap = ivv:madd(DelTimestamp, ThisReplica, AckMap)}};
 
 handle_call(elements, _From, State) ->
     Elements = rset:elements(State),
@@ -93,36 +122,47 @@ handle_call(_Request, _From, State) ->
     {reply, Reply, State}.
 
 handle_cast({add_downstream, {_Value, _Timestamp, SourceReplica}=Element},
-            #rset{repinfo={ThisReplica, _, _}}=State0) ->
+            #state{rset=#rset{repinfo={ThisReplica, _, _}}=Rset0}=State) ->
     lager:debug("Add downstream operation received from SourceReplica: ~p "
                 "ThisReplica: ~p Element: ~p",
                 [SourceReplica, ThisReplica, Element]),
-    {Element, State} = rset:add(Element, State0),
+    {Element, Rset} = rset:add(Element, Rset0),
     add_ack(SourceReplica, ThisReplica, Element),
-    {noreply, State};
+    {noreply, State#state{rset=Rset}};
 
-handle_cast({ack_add_downstream, ThisReplica, DownstreamReplica, Element},
-            #rset{repinfo={ThisReplica, _, _}}=State) ->
+handle_cast({ack_add_downstream, ThisReplica, DownstreamReplica,
+             {_, Timestamp, _}=Element},
+            #state{rset=#rset{repinfo={ThisReplica, _, _}},
+                   ackmap=AckMap}=State) ->
     lager:debug("Add downstream ACK received at ThisReplica: ~p "
                 "from DownstreamReplica: ~p for Element: ~p",
                 [ThisReplica, DownstreamReplica, Element]),
-    {noreply, State};
+
+    {noreply, State#state{
+                %% Record that Downstream Replica has received this downstream
+                %% operation
+                ackmap=ivv:madd(Timestamp, DownstreamReplica, AckMap)}};
 
 handle_cast({delete_downstream, {#{}=_DelIVVMap, _Timestamp, SourceReplica}=DelElement},
-            #rset{repinfo={ThisReplica, _, _}}=State0) ->
+            #state{rset=#rset{repinfo={ThisReplica, _, _}}=Rset0}=State) ->
     lager:debug("Delete downstream operation received from SourceReplica: ~p "
                 "ThisReplica: ~p DelElement: ~p",
                 [SourceReplica, ThisReplica, DelElement]),
-    {DelElement, State} = rset:delete(DelElement, State0),
+    {DelElement, Rset} = rset:delete(DelElement, Rset0),
     del_ack(SourceReplica, ThisReplica, DelElement),
-    {noreply, State};
+    {noreply, State#state{rset=Rset}};
 
-handle_cast({ack_delete_downstream, ThisReplica, DownstreamReplica, DelIVVMap},
-            #rset{repinfo={ThisReplica, _, _}}=State) ->
+handle_cast({ack_delete_downstream, ThisReplica, DownstreamReplica,
+             {_, DelTimestamp, _}=DelElement},
+            #state{rset=#rset{repinfo={ThisReplica, _, _}},
+                   ackmap=AckMap}=State) ->
     lager:debug("Delete downstream ACK received at ThisReplica: ~p "
-                "from DownstreamReplica: ~p for DelIVVMap: ~p",
-                [ThisReplica, DownstreamReplica, DelIVVMap]),
-    {noreply, State};
+                "from DownstreamReplica: ~p for DelElement: ~p",
+                [ThisReplica, DownstreamReplica, DelElement]),
+    {noreply, State#state{
+                %% Record that Downstream Replica has received this downstream
+                %% operation
+                ackmap=ivv:madd(DelTimestamp, DownstreamReplica, AckMap)}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
