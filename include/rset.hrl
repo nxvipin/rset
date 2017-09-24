@@ -9,7 +9,9 @@
 -type value()           :: any().
 -type timestamp()       :: non_neg_integer().
 
--type replica()         :: any().
+-type replica_name()    :: atom().
+-type replica_node()    :: atom().
+-type replica()         :: {replica_name(), replica_node()}.
 -type this_replica()    :: replica().       %% Current replica
 -type other_replicas()  :: list(replica()). %% All replicas except `this` replica
 -type all_replicas()    :: list(replica()). %% All participating replicas

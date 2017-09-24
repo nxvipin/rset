@@ -6,6 +6,7 @@
 
 %% API
 -export([create/1,
+         create/2,
          add/2,
          delete/2,
          elements/1]).
@@ -29,13 +30,24 @@
                 dlog   :: map(),
                 ackmap :: ackivvmap()}).
 
-
-create(AllReplicas) ->
+-spec create(list(replica() | replica_name())) -> {ok, list(pid())}.
+create(AllReplicas0) ->
+    AllReplicas = validate_replicas(AllReplicas0),
     rset_sup:create_replica(AllReplicas).
 
+-spec create(list(replica_name()), node()) -> {ok, list(pid())};
+            (replica_name(), list(node())) -> {ok, list(pid())}.
 
-start_link(ThisReplica, AllReplicas) ->
-    gen_server:start_link({local, ThisReplica}, ?MODULE,
+create(ReplicaNames, Node) when is_list(ReplicaNames), is_atom(Node) ->
+    AllReplicas = validate_replicas([{Replica, Node} || Replica <- ReplicaNames]),
+    rset_sup:create_replica(AllReplicas);
+
+create(ReplicaName, NodeList) when is_atom(ReplicaName), is_list(NodeList) ->
+    AllReplicas = validate_replicas([{ReplicaName, Node} || Node <- NodeList]),
+    rset_sup:create_replica(AllReplicas).
+
+start_link({ThisReplicaName, _ThisReplicaNode}=ThisReplica, AllReplicas) ->
+    gen_server:start_link({local, ThisReplicaName}, ?MODULE,
                           [ThisReplica, AllReplicas], []).
 
 
@@ -113,8 +125,8 @@ handle_call({delete, Value}, From,
        %% message at ThisReplica
        ackmap = ivv:madd(DelTimestamp, ThisReplica, AckMap)}};
 
-handle_call(elements, _From, State) ->
-    Elements = rset:elements(State),
+handle_call(elements, _From, #state{rset=Rset}=State) ->
+    Elements = rset:elements(Rset),
     {reply, {ok, Elements}, State};
 
 handle_call(_Request, _From, State) ->
@@ -175,3 +187,16 @@ terminate(_Reason, _State) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+
+%% -----------------------------------------------------------------------------
+
+-spec validate_replicas(list(replica() | replica_name())) -> list(replica()).
+validate_replicas(Input) ->
+    lists:map(
+      fun({ReplicaName, ReplicaNode}) when is_atom(ReplicaName),
+                                           is_atom(ReplicaNode) ->
+              {ReplicaName, ReplicaNode};
+         (ReplicaName) when is_atom(ReplicaName) ->
+              {ReplicaName, node()}
+      end, Input).
