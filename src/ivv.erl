@@ -22,7 +22,8 @@
          madd/2,
          madd/3,
          munion/2,
-         mcontains/3]).
+         mcontains/3,
+         mget/2]).
 
 -export_type([ivv/0]).
 
@@ -126,6 +127,10 @@ munion(IVVMap1, IVVMap2) ->
 mcontains(Integer, Key, IVVMap) ->
     #{Key := IVV} = IVVMap,
     contains(Integer, IVV).
+
+-spec mget(any(), ivvmap()) -> ivv().
+mget(Key, IVVMap) ->
+    maps:get(Key, IVVMap, []).
 
 
 %% -----------------------------------------------------------------------------
