@@ -7,7 +7,10 @@
 -export([init/2,
          add/2,
          delete/2,
-         elements/1]).
+         contains/2,
+         elements/1,
+         ivvmap/1,
+         ivv/2]).
 
 %% -----------------------------------------------------------------------------
 
@@ -75,10 +78,19 @@ delete(Value, #rset{elements=Elements, timestamp=Timestamp0,
     Timestamp = Timestamp0 + 1,
     IVVMap = ivv:minit(AllReplicas),
     DelPairs = [{ETimestamp, EReplica}
-                || {EValue, ETimestamp, EReplica} <- Elements, EValue = Value],
+                || {EValue, ETimestamp, EReplica} <- Elements, EValue == Value],
     DelIVVMap = ivv:madd(DelPairs, IVVMap),
     DelElement = {DelIVVMap, Timestamp, SourceReplica},
     delete(DelElement, Rset#rset{timestamp=Timestamp}).
 
+contains(Value, #rset{}=Rset) ->
+    lists:member(Value, elements(Rset)).
+
 elements(#rset{elements=Elements}) ->
     [Val || {Val, _, _} <- Elements].
+
+ivvmap(#rset{ivvmap=IVVMap}) ->
+    IVVMap.
+
+ivv(Replica, #rset{ivvmap=IVVMap}) ->
+    maps:get(Replica, IVVMap, []).

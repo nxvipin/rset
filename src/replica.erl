@@ -9,7 +9,10 @@
          create/2,
          add/2,
          delete/2,
-         elements/1]).
+         contains/2,
+         elements/1,
+         ivvmap/1,
+         ivv/2]).
 
 % Internal API
 -export([start_link/2]).
@@ -67,8 +70,17 @@ delete(Replica, {#{}=_, _,_}=DelElement) ->
 delete(Replica, Value) ->
     gen_server:call(Replica, {delete, Value}).
 
+contains(Replica, Value) ->
+    gen_server:call(Replica, {'contains?', Value}).
+
 elements(Replica) ->
     gen_server:call(Replica, elements).
+
+ivvmap(Replica) ->
+    gen_server:call(Replica, ivvmap).
+
+ivv(Replica, DownstreamReplica) ->
+    gen_server:call(Replica, {ivv, DownstreamReplica}).
 
 add_ack(SourceReplica, DownstreamReplica, {_,_,_}=Element) ->
     %% Ack a downstream add message received by the
@@ -125,9 +137,18 @@ handle_call({delete, Value}, From,
        %% message at ThisReplica
        ackmap = ivv:madd(DelTimestamp, ThisReplica, AckMap)}};
 
+handle_call({'contains?', Value}, _From, #state{rset=Rset}=State) ->
+    {reply, {ok, rset:contains(Value, Rset)}, State};
+
 handle_call(elements, _From, #state{rset=Rset}=State) ->
     Elements = rset:elements(Rset),
     {reply, {ok, Elements}, State};
+
+handle_call(ivvmap, _From, #state{rset=Rset}=State) ->
+    {reply, {ok, rset:ivvmap(Rset)}, State};
+
+handle_call({ivv, Replica}, _From, #state{rset=Rset}=State) ->
+    {reply, {ok, rset:ivv(Replica, Rset)}, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
