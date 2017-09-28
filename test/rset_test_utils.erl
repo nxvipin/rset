@@ -25,7 +25,7 @@ start_node(NodeAtom) ->
     [Name, Host] = lists:map(fun erlang:list_to_atom/1,
                              string:tokens(atom_to_list(NodeAtom), "@")),
 
-    SlaveArg = "-pa ../../../default/lib/*/ebin ../../../test/lib/*/ebin",
+    SlaveArg = "-pa ../../../default/lib/*/ebin ../../../test/lib/*/ebin -config ../../../../app.config",
     case slave:start(Host, Name, SlaveArg) of
         {ok, _} ->
             NodeAtom;
