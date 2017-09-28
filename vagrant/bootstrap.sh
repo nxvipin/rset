@@ -17,3 +17,5 @@ echo "export ERL_AFLAGS=\"-kernel shell_history enabled\"" >> /home/vagrant/.bas
 # Setup passwordless ssh (for tests)
 ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa
 cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+
+echo "cd /rset" >> /home/vagrant/.bashrc
