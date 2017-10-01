@@ -53,22 +53,18 @@ start_link({ThisReplicaName, _ThisReplicaNode}=ThisReplica, AllReplicas) ->
     gen_server:start_link({local, ThisReplicaName}, ?MODULE,
                           [ThisReplica, AllReplicas], []).
 
-
-add(Replica, {_,_,_}=Element) ->
-    %% Downstream operations are async. This is called by the source replica to
-    %% propagate downstream add operation.
-    gen_server:cast(Replica, {add_downstream, Element});
-
 add(Replica, Value) ->
     gen_server:call(Replica, {add, Value}).
 
-delete(Replica, {#{}=_, _,_}=DelElement) ->
-    %% Downstream operations are async. This is called by the source replica to
-    %% propagate downstream delete operation.
-    gen_server:cast(Replica, {delete_downstream, DelElement});
-
 delete(Replica, Value) ->
     gen_server:call(Replica, {delete, Value}).
+
+send_downstream(Replica, {#{}=_, _,_}=DelElement) ->
+    gen_server:cast(Replica, {delete_downstream, DelElement});
+
+send_downstream(Replica, {_,_,_}=AddElement) ->
+    gen_server:cast(Replica, {add_downstream, AddElement}).
+
 
 contains(Replica, Value) ->
     gen_server:call(Replica, {'contains?', Value}).
@@ -107,7 +103,7 @@ handle_call({add, Value}, From,
                 "ThisReplica: ~p Timestamp: ~p Value:~p",
                 [From, ThisReplica, Timestamp, Value]),
     %% Send the element to other downstream replicas asynchronously
-    [add(Replica, Element) || Replica <- OtherReplicas],
+    [send_downstream(Replica, Element) || Replica <- OtherReplicas],
     {reply, {ok, Element}, State#state{
                              %% Update the set in the state
                              rset=Rset,
@@ -126,7 +122,7 @@ handle_call({delete, Value}, From,
     lager:debug("Delete operation received from Client: ~p ThisReplica: ~p "
                 "DelIVVMap:~p", [From, ThisReplica, DelElement]),
     %% Send the delete element to other downstream replicas asychronously
-    [delete(Replica, DelElement) || Replica <- OtherReplicas],
+    [send_downstream(Replica, DelElement) || Replica <- OtherReplicas],
     {reply, {ok, DelElement},
      State#state{
        %% Update the set in the state
