@@ -13,13 +13,14 @@
          end_per_testcase/2]).
 
 %% Rset tests
--export([test_sanity/1]).
+-export([test_sanity/1,
+         test_add_wins/1]).
 
 
 %% -----------------------------------------------------------------------------
 
 
-all() -> [test_sanity].
+all() -> [test_sanity, test_add_wins].
 
 init_per_suite(Config) ->
     Nodes = rset_test_utils:test_nodes(),
@@ -71,7 +72,52 @@ test_sanity(Config) ->
     ok.
 
 
+test_add_wins(Config) ->
+    TestReplicas = test_replicas(Config),
+    RandReplica1 = test_random_replica(Config),
+    RandReplica2 = test_random_replica(Config, RandReplica1),
+
+    %% Create `test` set replicas on all nodes
+    replica:create(TestReplicas),
+
+    %% Add initial elements
+    {ok, {xyz, T1, _}} = replica:add(RandReplica1, xyz),
+    {ok, {xyz, T2, _}} = replica:add(RandReplica2, xyz),
+    wait({RandReplica1, T1}, TestReplicas),
+    wait({RandReplica2, T2}, TestReplicas),
+    is_everywhere(xyz, TestReplicas),
+
+    %% Disconnect the replicas.
+    disconnect(RandReplica1, RandReplica2),
+
+    %% Add into one set and delete from another set at the same timestamp
+    {ok, {_, TF, _}} = replica:add(RandReplica1, xyz),
+    {ok, {_, TF, _}} = replica:delete(RandReplica2, xyz),
+
+    %% Connect the replicas
+    connect(RandReplica1, RandReplica2),
+
+    %% Sync the replicas
+    replica:sync(RandReplica1),
+    replica:sync(RandReplica2),
+
+    %% Ensure that everything is synced
+    wait({RandReplica1, TF}, TestReplicas),
+    wait({RandReplica2, TF}, TestReplicas),
+
+    %% Verify that add wins
+    is_everywhere(xyz, TestReplicas),
+
+    %% Issue one more delete and none of the replicas must have it
+    {ok, {_, T5, _}} = replica:delete(RandReplica2, xyz),
+    wait({RandReplica2, T5}, TestReplicas),
+    is_nowhere(xyz, TestReplicas),
+
+    ok.
+
+
 %% -----------------------------------------------------------------------------
+
 
 test_replicas(Config) ->
     TestSet = ?config(test_set, Config),
@@ -81,6 +127,13 @@ test_replicas(Config) ->
 test_random_replica(Config) ->
     Replicas = test_replicas(Config),
     lists:nth(rand:uniform(length(Replicas)), Replicas).
+
+test_random_replica(Config, Except) ->
+    case test_random_replica(Config) of
+        Except -> test_random_replica(Config, Except);
+        Replica -> Replica
+    end.
+
 
 
 wait({SourceReplica, SourceMsgTimestamp}, AllReplicas) ->
@@ -100,3 +153,24 @@ wait({SourceReplica, SourceMsgTimestamp}, AllReplicas) ->
             timer:sleep(10),
             wait({SourceReplica, SourceMsgTimestamp}, AllReplicas)
     end.
+
+contains_all_or_none(_Value, [], _Boolean) ->
+    ok;
+contains_all_or_none(Value, [Replica|Rest] = _AllReplicas, Boolean) ->
+    {ok, Boolean} = replica:contains(Replica, Value),
+    contains_all_or_none(Value, Rest, Boolean).
+
+is_everywhere(Value, AllReplicas) ->
+    contains_all_or_none(Value, AllReplicas, true).
+
+is_nowhere(Value, AllReplicas) ->
+    contains_all_or_none(Value, AllReplicas, false).
+
+disconnect({_, Node1}, {_, Node2}) ->
+	ct_rpc:call(Node1, erlang, disconnect_node, [Node2]),
+	ct_rpc:call(Node1, erlang, set_cookie, [Node2, wrong_cookie]).
+
+connect({_, Node1}, {_, Node2}) ->
+	ct_rpc:call(Node1, erlang, disconnect_node, [Node2]),
+	Cookie = ct_rpc:call(Node1, erlang, get_cookie, []),
+	ct_rpc:call(Node1, erlang, set_cookie, [Node2, Cookie]).
