@@ -1,5 +1,10 @@
 language: erlang
 
+before_install:
+  - sudo apt-get install ssh
+  - ssh-keygen -t rsa -P '' -f ~/.ssh/id_rsa
+  - cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+
 otp_release:
   - 20.0
 
@@ -8,3 +13,4 @@ install:
 
 script:
   - rebar3 eunit
+  - rebar3 ct --name ct@127.0.0.1 --config app.config
