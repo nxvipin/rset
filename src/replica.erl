@@ -12,7 +12,9 @@
          contains/2,
          elements/1,
          ivvmap/1,
-         ivv/2]).
+         ivv/2,
+         sync/1,
+         sync_all/1]).
 
 % Internal API
 -export([start_link/2]).
@@ -77,6 +79,12 @@ ivvmap(Replica) ->
 
 ivv(Replica, DownstreamReplica) ->
     gen_server:call(Replica, {ivv, DownstreamReplica}).
+
+sync(Replica) ->
+    gen_server:cast(Replica, sync).
+
+sync_all(Replica) ->
+    gen_server:cast(Replica, sync_all).
 
 add_ack(SourceReplica, DownstreamReplica, {_,_,_}=Element) ->
     %% Ack a downstream add message received by the
@@ -192,6 +200,34 @@ handle_cast({ack_delete_downstream, ThisReplica, DownstreamReplica,
                 %% Record that Downstream Replica has received this downstream
                 %% operation
                 ackmap=ivv:madd(DelTimestamp, DownstreamReplica, AckMap)}};
+
+handle_cast(sync, #state{rset=#rset{repinfo={ThisReplica, OtherReplicas, _}}=Rset,
+                         dlog=Dlog,
+                         ackmap=AckMap}=State) ->
+    %% Send all the elements that have not been acknowledged by downstream
+    %% replicas.
+    %% [TODO]: This is ugly, fix it.
+    ThisReplicaInterval = rset:ivv(ThisReplica, Rset),
+    lists:map(
+      fun(Rep) ->
+              RepAck = maps:get(Rep, AckMap),
+              UnackedTimestamps = ivv:diff(ThisReplicaInterval, RepAck),
+              lager:debug("Elements: ~p from SourceReplica: ~p have not been "
+                          "acknowledged by DownstreamReplica: ~p~n",
+                          [UnackedTimestamps, ThisReplica, Rep]),
+              lists:map(
+                fun(UnackedTimestamp) ->
+                        UnackedMsg = maps:get(UnackedTimestamp, Dlog),
+                        send_downstream(Rep, UnackedMsg)
+                end,
+                UnackedTimestamps)
+      end,
+      OtherReplicas),
+    {noreply, State};
+
+handle_cast(sync_all, #state{rset=#rset{repinfo={_, _, AllReplicas}}}=State) ->
+    [sync(Replica) || Replica <- AllReplicas],
+    {noreply, State};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
